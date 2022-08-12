@@ -68,7 +68,6 @@ func (h *ConnectionHandler) readConnection() error {
 					break
 				}
 				if time.Since(ts) > h.connReadTtl {
-					fmt.Printf("Message read ttl %s exceeded time sinse %s\n", h.connReadTtl, time.Since(ts))
 					return fmt.Errorf("Message read ttl %s exceeded time sinse %s\n", h.connReadTtl, time.Since(ts))
 				}
 
