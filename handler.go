@@ -89,9 +89,9 @@ func (h *ConnectionHandler) writeConnection(conn net.Conn) error {
 	}
 }
 
-func (h *ConnectionHandler) HandleConnection(conn net.Conn, handlerFunc func()) {
+func (h *ConnectionHandler) HandleConnection(conn net.Conn, handlerFunc func(conn net.Conn)) {
 	for i := 0; i < h.numWorkers; i++ {
-		go handlerFunc()
+		go handlerFunc(conn)
 	}
 	go h.writeConnection(conn)
 	go h.readConnection(conn)
