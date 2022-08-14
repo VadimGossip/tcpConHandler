@@ -12,31 +12,28 @@ type chanMsg struct {
 	msgBody []byte
 }
 type ConnectionHandler struct {
-	conn        net.Conn
-	connReadTtl time.Duration
-	handlerFunc func()
 	readChan    chan chanMsg
 	writeChan   chan chanMsg
 	numWorkers  int
 	chanBufSize int
+	connReadTtl time.Duration
 }
 
 func getBsonBytesLength(lengthSlice []byte) int {
 	return int(binary.LittleEndian.Uint32(lengthSlice))
 }
 
-func NewConnectionHandler(conn net.Conn, connReadTtl time.Duration, handlerFunc func(), numWorkers, chanBufSize int) *ConnectionHandler {
-	return &ConnectionHandler{conn: conn,
-		connReadTtl: connReadTtl,
-		handlerFunc: handlerFunc,
+func NewConnectionHandler(numWorkers, chanBufSize int, connReadTtl time.Duration) *ConnectionHandler {
+	return &ConnectionHandler{
 		readChan:    make(chan chanMsg, chanBufSize),
 		writeChan:   make(chan chanMsg, chanBufSize),
 		numWorkers:  numWorkers,
-		chanBufSize: chanBufSize}
+		chanBufSize: chanBufSize,
+		connReadTtl: connReadTtl}
 }
 
-func (h *ConnectionHandler) WriteChan(msgBody []byte) {
-	h.writeChan <- chanMsg{conn: h.conn, msgBody: msgBody}
+func (h *ConnectionHandler) WriteChan(conn net.Conn, msgBody []byte) {
+	h.writeChan <- chanMsg{conn: conn, msgBody: msgBody}
 }
 
 func (h *ConnectionHandler) ReadChan() []byte {
@@ -44,11 +41,11 @@ func (h *ConnectionHandler) ReadChan() []byte {
 	return msg.msgBody
 }
 
-func (h *ConnectionHandler) readConnection() error {
+func (h *ConnectionHandler) readConnection(conn net.Conn) error {
 	for {
 		ts := time.Now()
 		fullBody := make([]byte, 4)
-		_, err := h.conn.Read(fullBody)
+		_, err := conn.Read(fullBody)
 		lengthBytes := getBsonBytesLength(fullBody)
 		if err != nil {
 			return err
@@ -58,7 +55,7 @@ func (h *ConnectionHandler) readConnection() error {
 			for {
 				if len(fullBody) == lengthBytes {
 					h.readChan <- chanMsg{
-						conn:    h.conn,
+						conn:    conn,
 						msgBody: fullBody}
 					break
 				}
@@ -68,7 +65,7 @@ func (h *ConnectionHandler) readConnection() error {
 
 				restBytes := lengthBytes - len(fullBody)
 				restBody := make([]byte, restBytes)
-				receivedBytes, err := h.conn.Read(restBody)
+				receivedBytes, err := conn.Read(restBody)
 
 				if err != nil {
 					return err
@@ -82,7 +79,7 @@ func (h *ConnectionHandler) readConnection() error {
 	}
 }
 
-func (h *ConnectionHandler) writeConnection() error {
+func (h *ConnectionHandler) writeConnection(conn net.Conn) error {
 	for {
 		msg := <-h.writeChan
 		_, err := msg.conn.Write(msg.msgBody)
@@ -92,11 +89,10 @@ func (h *ConnectionHandler) writeConnection() error {
 	}
 }
 
-func (h *ConnectionHandler) HandleConnection() error {
+func (h *ConnectionHandler) HandleConnection(conn net.Conn, handlerFunc func()) {
 	for i := 0; i < h.numWorkers; i++ {
-		go h.handlerFunc()
+		go handlerFunc()
 	}
-	go h.writeConnection()
-	go h.readConnection()
-	return nil
+	go h.writeConnection(conn)
+	go h.readConnection(conn)
 }
