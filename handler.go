@@ -11,11 +11,6 @@ type chanMsg struct {
 	conn    net.Conn
 	msgBody []byte
 }
-
-type Handler interface {
-	HandleConnection() error
-}
-
 type ConnectionHandler struct {
 	conn        net.Conn
 	connReadTtl time.Duration
